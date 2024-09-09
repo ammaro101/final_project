@@ -36,12 +36,28 @@ from IPython.display import Image, display
 from datetime import datetime
 
 ###########################################################################################################
+# insert the stock symbols into a list
+symbols_list = ['PFE', 'ROP', 'XYL', 'CPAY', 'INCY']
+
+
 # define a function to load the data from source (yfinance API), and save it as a csv to local storage
 def loadData(symbols=symbols_list, period='10y', interval='1wk'):
     
+    # the timestamp column name is different depending on the interval, this will set the timestamp to the appropriate value based on the interval
+#     if interval in ['1d', '5d', '1wk', '1mo', '3mo']: 
+#         timestamp = 'Date'
+#     else:
+#         timestamp = 'Datetime'
+    
     try:
         # load the the dataframe from the csv file if it already exist
-        df = pd.read_csv(f'{period}_{interval}_stocks_data.csv').set_index(['Date', 'Ticker'])
+        df = pd.read_csv(f'{period}_{interval}_stocks_data.csv')
+        
+        # the timestamp column name is different depending on the interval, this will set the timestamp to the appropriate value based on the interval
+        if 'Date' in df.columns:
+            df.set_index(['Date', 'Ticker'], inplace=True)
+        else:
+            df.set_index(['Datetime', 'Ticker'], inplace=True)
         
         print("Data loaded from directory")
         
@@ -63,7 +79,12 @@ def loadData(symbols=symbols_list, period='10y', interval='1wk'):
         stocks_data.to_csv(f'{period}_{interval}_stocks_data.csv', index=True)
 
         # load the the dataframe from the csv file
-        df = pd.read_csv(f'{period}_{interval}_stocks_data.csv').set_index(['Date', 'Ticker'])
+        df = pd.read_csv(f'{period}_{interval}_stocks_data.csv')
+        
+        if 'Date' in df.columns:
+            df.set_index(['Date', 'Ticker'], inplace=True)
+        else:
+            df.set_index(['Datetime', 'Ticker'], inplace=True)
 
     finally: 
         # create a dict to store the dataframe of each unique symbol where keys are symbol, values are dataframes
@@ -384,7 +405,7 @@ def calculate_data_balance(_dfs):
         trend_1_ratio = trend_1/row_num
         
         # print the ratio to the screen
-        print(f"The Trend up ratio of {symbol} is: {trend_1_ratio}")
+        print(f"The Trend up ratio of {symbol} is {trend_1_ratio} for {row_num} rows")
         
         # add the ratio to total
         total += trend_1_ratio
@@ -416,7 +437,6 @@ def calculate_common_sense_baseline(_dfs):
         
         # add the score to the total
         total += common_sense_score
-       
     
     # get the average score
     average = total / len(_dfs.keys())
@@ -431,7 +451,7 @@ def calculate_common_sense_baseline(_dfs):
 def apply_scaler(scaler, features):
     
     # set the training and test ratio to be 70-30
-    training_ratio = int(len(features) * 0.7)
+    training_ratio = int(len(features) * 0.8)
 
     # devide the feature set into training and test set
     X_train, X_test = features[:training_ratio], features[training_ratio:]
@@ -477,8 +497,12 @@ def create_train_vald_test_sets(_df, scaler, target="classification", timesteps=
     # reset the index
     _df.reset_index(inplace = True)
     
-    # drop the Date column as it's not necessary for now
-    _df.drop(['Date'], axis=1, inplace=True)
+    if 'Date' in _df.columns:
+        # drop the Date column as it's not necessary for now
+        _df.drop(['Date'], axis=1, inplace=True)
+    else:
+        # drop the Datetime column as it's not necessary for now
+        _df.drop(['Datetime'], axis=1, inplace=True)
 
     # set the features set
     X = _df.iloc[:, :-2]
@@ -503,19 +527,21 @@ def create_train_vald_test_sets(_df, scaler, target="classification", timesteps=
         y_seq = to_categorical(y_seq)
 
     # devide the data into a training set and a test set in 70-30 ratio
-    training_ratio = int(len(X) * 0.7)
+    training_ratio = int(len(X) * 0.8)
     
     # add a vaidation ratio at 20% of the data, this will leave 10% as test
-    validation_ratio = int(len(X) * 0.2)
+#     validation_ratio = int(len(X) * 0.2)
     
-    X_train, X_vald, X_test = X_seq[:training_ratio], X_seq[training_ratio:training_ratio + validation_ratio], X_seq[training_ratio + validation_ratio:]
-    y_train, y_vald, y_test = y_seq[:training_ratio], y_seq[training_ratio:training_ratio + validation_ratio], y_seq[training_ratio + validation_ratio:]
+#     X_train, X_vald, X_test = X_seq[:training_ratio], X_seq[training_ratio:training_ratio + validation_ratio], X_seq[training_ratio + validation_ratio:]
+#     y_train, y_vald, y_test = y_seq[:training_ratio], y_seq[training_ratio:training_ratio + validation_ratio], y_seq[training_ratio + validation_ratio:]
 
-#     X_train, X_test = X_seq[:training_ratio], X_seq[training_ratio:]
-#     y_train, y_test = y_seq[:training_ratio], y_seq[training_ratio:]
+    X_train, X_test = X_seq[:training_ratio], X_seq[training_ratio:]
+    y_train, y_test = y_seq[:training_ratio], y_seq[training_ratio:]
 
     # return the sets and the last_date
-    return X_train, X_vald, X_test, y_train, y_vald, y_test
+#     return X_train, X_vald, X_test, y_train, y_vald, y_test
+    return X_train, X_test, y_train, y_test
+
 
 
 # create a function that takes a dict of dataframes, and return a dict of training, validation and testing datasets
@@ -528,12 +554,17 @@ def prepare_data_to_train(dfs_dict, scaler, target, timesteps):
     for symbol in dfs_dict.keys():
         
         # convert the dataframe into training, validation and test sets
-        X_train, X_vald, X_test, y_train, y_vald, y_test = create_train_vald_test_sets(dfs_dict[symbol].copy(deep=True), scaler, target, timesteps)
+#         X_train, X_vald, X_test, y_train, y_vald, y_test = create_train_vald_test_sets(dfs_dict[symbol].copy(deep=True), scaler, target, timesteps)
+        X_train, X_test, y_train, y_test = create_train_vald_test_sets(dfs_dict[symbol].copy(deep=True), scaler, target, timesteps)
         
         # create a dict of the sets and add it to the sets_dict
+#         sets_dict[symbol] = {
+#             'X_train': X_train, 'X_vald': X_vald, 'X_test': X_test, 
+#             'y_train': y_train, 'y_vald': y_vald, 'y_test': y_test
+#         }
         sets_dict[symbol] = {
-            'X_train': X_train, 'X_vald': X_vald, 'X_test': X_test, 
-            'y_train': y_train, 'y_vald': y_vald, 'y_test': y_test
+            'X_train': X_train, 'X_test': X_test, 
+            'y_train': y_train, 'y_test': y_test
         }
     
     # return the sets
@@ -563,7 +594,7 @@ def create_models_archive(_create_model, _datasets_dict, _model_type='classifica
         
         # setup the data to be passed to the model
         X_train, y_train = _datasets_dict[symbol]['X_train'], _datasets_dict[symbol]['y_train']
-        X_vald, y_vald = _datasets_dict[symbol]['X_vald'], _datasets_dict[symbol]['y_vald']
+#         X_vald, y_vald = _datasets_dict[symbol]['X_vald'], _datasets_dict[symbol]['y_vald']
         X_test, y_test = _datasets_dict[symbol]['X_test'], _datasets_dict[symbol]['y_test']
 
         # source: 7.2. Inspecting and monitoring deep-learning models using Keras callba- acks and TensorBoard
@@ -572,15 +603,19 @@ def create_models_archive(_create_model, _datasets_dict, _model_type='classifica
         # monitor: Quantity to be monitored.
         # min_delta: Minimum change in the monitored quantity to qualify as an improvement (we will use the default value)
         # patience: Number of epochs with no improvement after which training will be stopped.
+#         stop_early = EarlyStopping(monitor='accuracy', 
+#                                    patience=20)
         stop_early = EarlyStopping(monitor='val_loss', 
-                                   min_delta=0, 
-                                   patience=5)
+                                   patience=50)
         
         # source: ReduceLROnPlateau, https://keras.io/api/callbacks/reduce_lr_on_plateau/
         # Reduce learning rate when a metric has stopped improving.
+#         reduce_lr =  ReduceLROnPlateau(monitor='accuracy', 
+#                                        factor=0.1, 
+#                                        patience=10)
         reduce_lr =  ReduceLROnPlateau(monitor='val_loss', 
                                        factor=0.1, 
-                                       patience=10)
+                                       patience=30)
         
         # initialize the model
 #         model = _create_model(X_train.shape)   
@@ -597,7 +632,7 @@ def create_models_archive(_create_model, _datasets_dict, _model_type='classifica
         # directory is and project name is the path where it will store the trails data results, this will make it much faster to rerun the training process if we need to
         if _tuner:
             tuner = _tuner(model, 
-                        objective='val_accuracy', 
+                        objective='val_mae', 
                         max_epochs=10, 
                         factor=3, 
                         hyperband_iterations=1, 
@@ -606,11 +641,16 @@ def create_models_archive(_create_model, _datasets_dict, _model_type='classifica
                         project_name=f'{_project_name}/{symbol}')
 
             # Run the hyperparameter search. The arguments for the search method are the same as those used for tf.keras.model.fit in addition to the callback above.
+#             tuner.search(X_train, y_train, 
+#                          epochs=_epochs, 
+#                          validation_data=(X_vald, y_vald), 
+#                          callbacks=[stop_early, reduce_lr], 
+#                         verbose=0)
+            
             tuner.search(X_train, y_train, 
+                         validation_split=0.2, 
                          epochs=_epochs, 
-                         validation_data=(X_vald, y_vald), 
-                         callbacks=[stop_early, reduce_lr], 
-                        verbose=0)
+                         callbacks=[stop_early])
 
             # source: The base Tuner class, https://keras.io/api/keras_tuner/tuners/base_tuner/
             # get_best_hyperparameters Returns the best hyperparameters, as determined by the objective as a list sorted from the best to the worst.
@@ -622,51 +662,68 @@ def create_models_archive(_create_model, _datasets_dict, _model_type='classifica
         
             # Build the model with the optimal hyperparameters and train it on the data for 50 epochs
             model = tuner.hypermodel.build(best_hps)
+            
+            print("best_hps: ", best_hps.values)
+            print("model summary")
+            model.summary()
                     
         
         # fit the model
+#         history = model.fit(X_train, y_train, 
+#                             epochs=_epochs, 
+#                             batch_size=32, 
+#                             validation_data=(X_vald, y_vald), 
+#                             callbacks=[stop_early, reduce_lr], 
+#                             verbose=0)    
         history = model.fit(X_train, y_train, 
                             epochs=_epochs, 
                             batch_size=32, 
-                            validation_data=(X_vald, y_vald), 
+                            validation_split=0.2, 
                             callbacks=[stop_early, reduce_lr], 
-                            verbose=0)
+                            verbose=1)
         
         # get the history of accuracy during training as a list
-        if _model_type == "classification":
-            val_prec_per_epoch = history.history['val_accuracy']
-        else:
-            val_prec_per_epoch = history.history['val_loss']
+#         if _model_type == "classification":
+#             val_prec_per_epoch = history.history['val_accuracy']
+#         else:
+#             val_prec_per_epoch = history.history['val_loss']
 
-        # get the index of the highest val_precision from this list, we will use this index to set the epochs values during the training
-        best_epoch = val_prec_per_epoch.index(max(val_prec_per_epoch)) + 1
-        print('Best epoch: %d' % (best_epoch,))
+#         # get the index of the highest val_precision from this list, we will use this index to set the epochs values during the training
+#         best_epoch = val_prec_per_epoch.index(max(val_prec_per_epoch)) + 1
+#         print('Best epoch: %d' % (best_epoch,))
 
-        ### train the model based on the results of the hyperparameter optimization process 
-        # Re-instantiate the hypermodel and train it with the optimal number of epochs from above.
-        if _tuner:
-            hypermodel = tuner.hypermodel.build(best_hps)
-        else:
-#             hypermodel = _create_model(X_train.shape)
-            hypermodel = model
+#         ### train the model based on the results of the hyperparameter optimization process 
+#         # Re-instantiate the hypermodel and train it with the optimal number of epochs from above.
+#         if _tuner:
+#             hypermodel = tuner.hypermodel.build(best_hps)
+#         else:
+# #             hypermodel = _create_model(X_train.shape)
+#             hypermodel = model
 
-        # Retrain the model
-        hypermodel_history = hypermodel.fit(X_train, y_train, 
-                                            validation_data=(X_vald, y_vald), 
-                                            epochs=best_epoch, 
-                                            verbose=0)
+#         # Retrain the model
+#         hypermodel_history = hypermodel.fit(X_train, y_train, 
+#                                             validation_data=(X_vald, y_vald), 
+#                                             epochs=best_epoch, 
+#                                             verbose=0)
 
         # evaluate the model
+        hypermodel = model
         model_evaluation = hypermodel.evaluate(X_test, y_test, verbose=0)
+#         model_evaluation = model.evaluate(X_test, y_test, verbose=0)
             
-        # get predictions from the model given the test set
+        # get predictions from the model given the test and validation set
         y_pred = hypermodel.predict(X_test)
+#         y_pred_vald = hypermodel.predict(X_vald)
 
         # evaluate the model whether the model type is classification or regression
         if _model_type == "classification":     
             # convert the predictions and test set to be in the shape of a vector of labels
             y_pred_labels = np.argmax(y_pred, axis=1)
             y_test_labels = np.argmax(y_test, axis=1)
+            
+            # do the same for the validation set
+#             y_pred_vald_labels = np.argmax(y_pred_vald, axis=1)
+#             y_vald_labels = np.argmax(y_vald, axis=1)
         else:
             # get the R2 of the model
             r2 = r2_score(y_test, y_pred)
@@ -685,11 +742,14 @@ def create_models_archive(_create_model, _datasets_dict, _model_type='classifica
         archive[symbol]['hyperparameters'] = best_hps if _tuner else None
         
         # store the the best model training and validation accuracy history
-        archive[symbol]['training_history'] = hypermodel_history
-        
+#         archive[symbol]['training_history'] = hypermodel_history
+        archive[symbol]['training_history'] = history
+
         # store the the best model prediction labels and true labels
         archive[symbol]['y_pred_labels'] = y_pred_labels if _model_type == "classification" else None
         archive[symbol]['y_test_labels'] = y_test_labels if _model_type == "classification" else None
+#         archive[symbol]['y_pred_vald_labels'] = y_pred_vald_labels if _model_type == "classification" else None
+#         archive[symbol]['y_vald_labels'] = y_vald_labels if _model_type == "classification" else None
         
         # store the R2 score for regression model
         archive[symbol]['r2'] = r2 if _model_type == "regression" else None
@@ -727,7 +787,8 @@ def create_train_vald_graph(training_history):
     # source of the code snippet[17]
     # get the training and validation loss
     loss = training_history['loss']
-    val_loss = training_history['val_loss']
+#     val_loss = training_history['val_loss']
+    accuracy = training_history['accuracy']
     
     # we can get the number of epochs simply from the length of the loss list
     epochs = range(1, len(loss) + 1)
@@ -739,10 +800,11 @@ def create_train_vald_graph(training_history):
     plt.plot(epochs, loss, 'bo', label='Training loss')
     
     # plot the validation loss against the epochs
-    plt.plot(epochs, val_loss, 'b', label='Validation loss')
+#     plt.plot(epochs, val_loss, 'b', label='Validation loss')
+    plt.plot(epochs, accuracy, 'b', label='accuracy loss')
     
     # add title and legend
-    plt.title('Training and validation loss')
+    plt.title('Training and accuracy loss')
     plt.legend()
     plt.show()
 
@@ -755,6 +817,10 @@ def evaluate_models_archive(_models_archive):
     total_recall = 0
     total_fscore = 0
     total_accuracy = 0
+#     total_vald_precision = 0
+#     total_vald_recall = 0
+#     total_vald_fscore = 0
+#     total_vald_accuracy = 0
     
     # iterate over the symbols of the dictionary
     for symbol in _models_archive.keys():
@@ -762,6 +828,10 @@ def evaluate_models_archive(_models_archive):
         # get the model y_test and y_pred
         y_test = _models_archive[symbol]['y_test_labels']
         y_pred = _models_archive[symbol]['y_pred_labels']
+        
+        # get the model y_vald and y_vald_pred
+#         y_vald = _models_archive[symbol]['y_vald_labels']
+#         y_vald_pred = _models_archive[symbol]['y_pred_vald_labels']
         
         # model summary
         _models_archive[symbol]['model'].summary()
@@ -772,12 +842,12 @@ def evaluate_models_archive(_models_archive):
         # disply the saved plot image
         display(Image(plot_path))
         
-        # classification model metrics
+        # classification model metrics for test set
         accuracy = accuracy_score(y_test, y_pred)
         precision, recall, fscore = calculate_precision_recall_fscore(y_test, y_pred)
         
         # print the metrics for each model
-        print(f"The {symbol} Model Classification Metrics:")
+        print(f"The {symbol} Model Classification Metrics for test set:")
         print(f"Accuracy: {accuracy}")
         print(f"Precision: {precision}")
         print(f"Recall: {recall}")
@@ -793,10 +863,34 @@ def evaluate_models_archive(_models_archive):
         # create confusion matrix
         create_confusion_matrix(y_test, y_pred)
         
+        ##########################################
+        # classification model metrics for test set
+#         accuracy = accuracy_score(y_vald, y_vald_pred)
+#         precision, recall, fscore = calculate_precision_recall_fscore(y_vald, y_vald_pred)
+        
+#         # print the metrics for each model
+#         print(f"The {symbol} Model Classification Metrics for validation set:")
+#         print(f"Accuracy: {accuracy}")
+#         print(f"Precision: {precision}")
+#         print(f"Recall: {recall}")
+#         print(f"F-Score: {fscore}")
+#         print("--------------------------------------------------------------")
+        
+#         # add the scores for this model to the total scores
+#         total_vald_precision += precision
+#         total_vald_recall += recall
+#         total_vald_fscore += fscore
+#         total_vald_accuracy += accuracy
+        
+#         # create confusion matrix
+#         create_confusion_matrix(y_vald, y_vald_pred)
+        
+        ################################################################################
+        
         # plot training vs validation loss
         create_train_vald_graph(_models_archive[symbol]['training_history'].history)
         
-    # calculate average metrics
+    # calculate average metrics for test set
     models_num = len(_models_archive.keys())
     average_precision = total_precision / models_num
     average_recall = total_recall / models_num
@@ -804,11 +898,26 @@ def evaluate_models_archive(_models_archive):
     average_accuracy = total_accuracy / models_num
 
     # print the average metrics
-    print(f"Average Classification Metrics for All Models:")
+    print(f"Average Classification Metrics for All Models on test set:")
     print(f"Average Accuracy: {average_accuracy}")
     print(f"Average Precision: {average_precision}")
     print(f"Average Recall: {average_recall}")
     print(f"Average F-Score: {average_fscore}")
+    
+    # calculate average metrics for validation set
+#     models_num = len(_models_archive.keys())
+#     average_vald_precision = total_vald_precision / models_num
+#     average_vald_recall = total_vald_recall / models_num
+#     average_vald_fscore = total_vald_fscore / models_num
+#     average_vald_accuracy = total_vald_accuracy / models_num
+
+#     # print the average metrics
+#     print(f"Average Classification Metrics for All Models on validation set:")
+#     print(f"Average Accuracy: {average_vald_accuracy}")
+#     print(f"Average Precision: {average_vald_precision}")
+#     print(f"Average Recall: {average_vald_recall}")
+#     print(f"Average F-Score: {average_vald_fscore}")
+    
     
 ###########################################################################################################
 
@@ -857,4 +966,127 @@ class RNNModel:
         return model
     
 ###########################################################################################################
+# source of inspiration: Introduction to the Keras Tuner, https://www.tensorflow.org/tutorials/keras/keras_tuner
+# constuct the model which will perform hyperparameter optimization to choose layers count, neurons counts, recurrent_dropout, optimizer_type, optimizer learning rate
+class HP_RNNModel(HyperModel):
 
+    # initialize the model upon creating a class instance
+    # using a class structure instead of a function to construct the model will allow us to pass variables to it before passing it to keras tuner
+    # source of inspiration on how to pass variables to the model before passing the model to keras tuner: https://github.com/JulieProst/keras-tuner-tutorial/blob/master/hypermodels.py
+    def __init__(self, X_train_shape, layer_type='SimpleRNN'):
+        self.X_train_shape = X_train_shape
+        self.layer_type = layer_type
+    
+    # build the model
+    def build(self, hp):
+        # initialize a sequential model
+        model = Sequential()
+
+        ### add the model layers (Model hyperparameters optimization)
+        # input layer
+        model.add(Input(shape=(self.X_train_shape[1], self.X_train_shape[2])))
+
+        # source: Int method, https://keras.io/api/keras_tuner/hyperparameters/
+        # dynamically optimize the number of layers
+        hp_layers = hp.Int(name='hp_layers', 
+                           min_value=2, 
+                           max_value=4, 
+                           step=2)
+
+        # for each optimized layer
+        for i in range(hp_layers):
+            
+#             # optimize the layer type
+#             hp_layer_type = hp.Choice(f'RNN_layer_{i}_type', values=['SimpleRNN', 'LSTM', 'GRU'])
+#             if hp_layer_type == 'SimpleRNN':
+#                 layer_type = SimpleRNN
+#             elif hp_layer_type == 'LSTM':
+#                 layer_type = LSTM
+#             else:
+#                 layer_type = GRU
+                
+            # select the layer type based on input
+            RNN_layer = self.layer_type
+            if RNN_layer == 'SimpleRNN':
+                RNN_layer = SimpleRNN
+            elif RNN_layer == 'LSTM':
+                RNN_layer = LSTM
+            else:
+                RNN_layer = GRU
+
+            # dynamically tune the number of units in each layer, select a value between 64-128
+            hp_units = hp.Int(name=f'hp_units_at_hp_layer_{i}', 
+                              min_value=64, 
+                              max_value=128, 
+                              step=64)
+            
+            # source: SimpleRNN layer, https://keras.io/api/layers/recurrent_layers/simple_rnn/
+            # return_sequences: Boolean. Whether to return the last output in the output sequence, or the full sequence. Default: False.
+            # set the return_sequences parameter to true unless it's the last layer, set it to false
+            return_sequences_boolean = i != (hp_layers - 1)
+
+            # source: Float method, https://keras.io/api/keras_tuner/hyperparameters/
+            # source: SimpleRNN layer, https://keras.io/api/layers/recurrent_layers/simple_rnn/
+            # recurrent_dropout: Float between 0 and 1. Fraction of the units to drop for the linear transformation of the recurrent state.
+            # dynamically tune the recurrent_dropout float value
+            recurrent_dropout = hp.Float(name=f'recurrent_dropout_{i}', 
+                                         min_value=0.0, 
+                                         max_value=0.5, 
+                                         step=0.1)
+
+            # add a simpleRNN layer and pass the optimized number of unites, recurrent_dropout, and the return_sequences boolean
+            layer = RNN_layer(units=hp_units, 
+                              return_sequences=return_sequences_boolean, 
+                              recurrent_dropout=recurrent_dropout)
+            model.add(layer)
+
+
+        # add the output layer
+        model.add(Dense(2, activation='softmax'))
+
+        ### the model compiler (Algorithm hyperparameters optimization)
+        # source: Choice method, https://keras.io/api/keras_tuner/hyperparameters/
+        # dynamically optimize the optimizer type
+#         hp_optimizer_type = hp.Choice('optimizer_type', values=['Adam', 'RMSprop', 'SGD'])
+#         if hp_optimizer_type == 'Adam':
+#             optimizer = Adam
+#         elif hp_optimizer_type == 'RMSprop':
+#             optimizer = RMSprop
+#         else:
+#             optimizer = SGD
+            
+        # set the optimizer type 
+        optimizer = Adam
+        
+
+        # dynamically tune the learning rate for the optimizer
+        # When sampling="log", the step is multiplied between samples.
+        hp_lr = hp.Float('learning_rate', 
+                         min_value=0.0001, 
+                         max_value=0.01, 
+                         sampling='LOG')
+        hp_optimizer = optimizer(learning_rate=hp_lr)
+
+        # compile the model
+        model.compile(optimizer=hp_optimizer, 
+                      loss='categorical_crossentropy', # this is the most suitable one for predictions of one-hot encoded labels
+                      metrics=['accuracy'])
+
+        # return the model
+        return model
+    
+    # source: omalleyt12, https://github.com/keras-team/keras-tuner/issues/122
+    # define a fit function which will allow us to pass an optimized value for batch_size
+    # *args and **kwargs are the ones we pass through tuner.search()
+    def fit(self, hp, model, *args, **kwargs):
+        
+        # dynamically optimize the batch_size for the training process
+        hp_batch_size = hp.Choice("batch_size", [32, 64])
+        return model.fit(
+            *args,
+            batch_size=hp_batch_size,
+            **kwargs,
+        )
+    
+
+###########################################################################################################
